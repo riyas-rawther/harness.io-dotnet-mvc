@@ -1,0 +1,24 @@
+harnessApiVersion: '1.0'
+type: INSTALL
+commandUnitType: COMMAND
+targetToAllEnv: true
+templateUri: riyas.rauther/Power Shell Commands/Install IIS Website:latest
+templateVariables:
+- name: ReleaseNo
+  value: '1'
+- name: ServiceName
+  value: phonebookapp
+- name: AppPoolName
+  value: phonebookapp
+- name: AppPoolDotNetVersion
+  value: v4.0
+- name: DownloadDirectory
+  value: C:\Windows\Temp
+- name: AppPhysicalDirectory
+  value: C:\inetpub\wwwroot\phonebookmvc
+- name: SiteProtocol
+  value: http
+- name: SitePort
+  value: '80'
+- name: SiteHostName
+  value: '*'

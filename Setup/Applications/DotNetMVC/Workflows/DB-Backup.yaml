@@ -1,0 +1,263 @@
+harnessApiVersion: '1.0'
+type: BASIC
+concurrencyStrategy: INFRA
+envName: DotNetMVC-IIS-website-ENV
+failureStrategies:
+- executionScope: WORKFLOW
+  failureTypes:
+  - APPLICATION_ERROR
+  repairActionCode: ROLLBACK_WORKFLOW
+  retryCount: 0
+- executionScope: WORKFLOW
+  failureTypes:
+  - APPLICATION_ERROR
+  repairActionCode: ROLLBACK_WORKFLOW
+  retryCount: 0
+notificationRules:
+- conditions:
+  - FAILED
+  executionScope: WORKFLOW
+  notificationGroupAsExpression: false
+  userGroupAsExpression: false
+  userGroupNames:
+  - Account Administrator
+phases:
+- type: WINRM
+  computeProviderName: Amazon Web Services
+  daemonSet: false
+  infraDefinitionName: DotNetMVC-IIS-Website-Infra
+  name: Phase 1
+  phaseSteps:
+  - type: INFRASTRUCTURE_NODE
+    name: Prepare Infra
+    steps:
+    - type: SHELL_SCRIPT
+      name: Backup- Northwind DB - Bash Script
+      properties:
+        commandPath: null
+        connectionAttributeName: null
+        executeOnDelegate: true
+        host: null
+        outputVars: ''
+        publishAsVar: false
+        scriptString: |-
+          #!/usr/bin/env bash
+
+          # Set some default values
+          MSSQL_HOST="172.31.42.223"
+          BACKUP_DIR="/var/dbbackups"
+          BACKUP_DAYS=7 # You can test by changing file dates using: touch -d "8 days ago" mssql_20160504-1542.gz
+          MSSQL_USER='SA'
+          MSSQL_PASS='jhsjs43$#hlfsgbfshdadalbasov'
+          MSSQL_EXEC="/opt/mssql-tools/bin/sqlcmd"
+          DATE=`date +%Y%m%d-%H%M%S` # YYYYMMDD-HHMMSS
+
+          # Set Backup Parameters
+          if [[ ! $1 == "" ]]
+          then
+                  BACKUP_DIR=$1
+          fi
+          if [[ ! $2 == "" ]]
+          then
+                  BACKUP_DAYS=$2
+          fi
+          if [[ ! $3 == "" ]]
+          then
+                  MSSQL_HOST=$3
+          fi
+          if [[ ! $4 == "" ]]
+          then
+                  MSSQL_USER=$4
+          fi
+          if [[ ! $5 == "" ]]
+          then
+                  MSSQL_PASS=$5
+          fi
+
+          echo ""
+          echo "Starting MSSQL backup with the following conditions:"
+          echo ""
+          echo "  Backup to: ${BACKUP_DIR}"
+          echo "  Backup timestamp: ${DATE}"
+          echo "  Keep backups for ${BACKUP_DAYS} days"
+          echo ""
+          echo "  MSSQL Server: ${MSSQL_HOST}"
+          echo "  MSSQL User: ${MSSQL_USER}"
+          echo "  MSSQL Password: **HIDDEN**"
+          echo ""
+
+          # If the backup directory does not exist, we will create it..
+          if [[ ! -d $BACKUP_DIR ]]
+          then
+                  echo ""
+                  echo "Backup directory does not exist, creating it..."
+                  mkdir -p $BACKUP_DIR
+                  echo ""
+          fi
+
+          # Disable error messages.
+          # exec 2> /dev/null
+
+          # Connect to MSSQL and get all databases to backup...
+          # DATABASES=`$MSSQL_EXEC -S "$MSSQL_HOST" -U "$MSSQL_USER" -P "$MSSQL_PASS" -Q "SELECT Name from sys.Databases" | grep -Ev "(-|Name|master|tempdb|model|msdb|affected\)$|\s\n|^$)"`
+
+          DATABASES=northwind
+
+          # Iterate over all of our databases and back them up one by one...
+          echo "Starting backups..."
+
+          for DBNAME in $DATABASES; do
+
+                 echo -n " - Backing up database \"${DBNAME}\"... "
+                 $MSSQL_EXEC  -S "$MSSQL_HOST" -U "$MSSQL_USER" -P "$MSSQL_PASS" -Q "BACKUP DATABASE [${DBNAME}] TO DISK = N'${DBNAME}/${DBNAME}_${DATE}.bak' WITH NOFORMAT, NOINIT, NAME = '${DBNAME}-full', SKIP, NOREWIND, NOUNLOAD, STATS = 10"
+                  echo "Done!"
+          done
+          echo "Backups complete!"
+          echo ""
+
+          # Re-enable error messages.
+          #exec 2> /dev/tty
+
+          # Now delete files older than X days
+          #find $BACKUP_DIR/* -mtime +$BACKUP_DAYS -exec rm {} \;
+        scriptType: BASH
+        sshKeyRefName: null
+        sweepingOutputName: null
+        sweepingOutputScope: null
+        templateExpressions: null
+        templateUuid: null
+        templateVariables: null
+        templateVersion: null
+        timeoutMillis: 60000
+    stepsInParallel: false
+  - type: DISABLE_SERVICE
+    name: Disable Service
+    stepsInParallel: false
+  - type: DEPLOY_SERVICE
+    name: Deploy Service
+    steps:
+    - type: COMMAND
+      name: Install
+      properties:
+        commandName: Install
+    - type: SHELL_SCRIPT
+      name: Pull DB Migration from git and restore
+      properties:
+        commandPath: null
+        connectionAttributeName: null
+        executeOnDelegate: true
+        host: null
+        outputVars: ''
+        publishAsVar: false
+        scriptString: "#!/usr/bin/env bash\nset -e\ncd /home/ubuntu/temp-db-changes\ngit fetch && git pull\n/opt/mssql-tools/bin/sqlcmd -S 172.31.42.223 -U SA -P 'jhsjs43$#hlfsgbfshdadalbasov' -b -i migration.sql \n"
+        scriptType: BASH
+        sshKeyRefName: null
+        sweepingOutputName: null
+        sweepingOutputScope: null
+        templateExpressions: null
+        templateUuid: null
+        templateVariables: null
+        templateVersion: null
+        timeoutMillis: 60000
+    stepsInParallel: false
+  - type: ENABLE_SERVICE
+    name: Enable Service
+    stepsInParallel: false
+  - type: VERIFY_SERVICE
+    name: Verify Service
+    stepsInParallel: false
+  - type: WRAP_UP
+    name: Wrap Up
+    stepsInParallel: false
+  provisionNodes: false
+  serviceName: IIS-Website
+  statefulSet: false
+preDeploymentSteps:
+- type: ARTIFACT_CHECK
+  name: Artifact Check
+rollbackPhases:
+- type: WINRM
+  computeProviderName: Amazon Web Services
+  daemonSet: false
+  infraDefinitionName: DotNetMVC-IIS-Website-Infra
+  name: Rollback Phase 1
+  phaseNameForRollback: Phase 1
+  phaseSteps:
+  - type: DISABLE_SERVICE
+    name: Disable Service
+    phaseStepNameForRollback: Enable Service
+    statusForRollback: SUCCESS
+    stepsInParallel: false
+  - type: STOP_SERVICE
+    name: Stop Service
+    phaseStepNameForRollback: Deploy Service
+    statusForRollback: SUCCESS
+    stepsInParallel: false
+  - type: DEPLOY_SERVICE
+    name: Deploy Service
+    phaseStepNameForRollback: Deploy Service
+    statusForRollback: SUCCESS
+    steps:
+    - type: SHELL_SCRIPT
+      name: Get Last Backup File Name
+      properties:
+        commandPath: '%TEMP%'
+        connectionAttributeName: PHC-BOM-UBUNTU-DELIGATE_SERVER
+        connectionType: WINRM
+        executeOnDelegate: false
+        host: 172.31.42.223
+        outputVars: LastBackupFile
+        publishAsVar: true
+        scriptString: |-
+          $dir="C:\Program Files\Microsoft SQL Server\MSSQL15.MSSQLSERVER\MSSQL\Backup\northwind\*.bak"
+          $latest=Get-ChildItem -path $dir | sort-object LastAccessTime -descending | select-object -First 1
+          $latest.name
+
+          $Env:LastBackupFile=$latest.name
+        scriptType: POWERSHELL
+        secretOutputVars: ''
+        sshKeyRefName: null
+        sweepingOutputName: backupfile
+        sweepingOutputScope: PHASE
+        templateExpressions: null
+        templateUuid: null
+        templateVariables: null
+        templateVersion: null
+        timeoutMillis: 600000
+    - type: SHELL_SCRIPT
+      name: Restore DB if migration fails
+      properties:
+        commandPath: null
+        connectionAttributeName: null
+        executeOnDelegate: true
+        host: null
+        outputVars: ''
+        publishAsVar: false
+        scriptString: "#!/usr/bin/env bash\necho \"below is the last backup file name\"\necho ${context.backupfile.LastBackupFile}\n\n/opt/mssql-tools/bin/sqlcmd -S 172.31.42.223 -U SA -P 'jhsjs43$#hlfsgbfshdadalbasov'  -Q \"\n\nuse master\ngo\nalter database [northwind] set single_user with rollback immediate\n-- The above command will close all the open connections and set the database in SINGLE_USER. \n-- Run the following query to detach the database.\n\nuse master\ngo\nexec sp_detach_db [northwind]\n-- The database will be detached successfully.\n\n--use master\n--go\n--Alter database [northwind] set single_user with rollback immediate\n--not required above command if it's detached\n\nUSE [master]\ngo\nRESTORE DATABASE [northwind] FROM  DISK = N'C:\\Program Files\\Microsoft SQL Server\\MSSQL15.MSSQLSERVER\\MSSQL\\Backup\\northwind\\${context.backupfile.LastBackupFile}' WITH  FILE = 1,  NOUNLOAD,  REPLACE,  STATS = 5\n\nuse master\ngo\nselect name,user_access_desc from sys.databases where name='northwind'\n\n\""
+        scriptType: BASH
+        sshKeyRefName: null
+        sweepingOutputName: null
+        sweepingOutputScope: null
+        templateExpressions: null
+        templateUuid: null
+        templateVariables: null
+        templateVersion: null
+        timeoutMillis: 60000
+    stepsInParallel: false
+  - type: ENABLE_SERVICE
+    name: Enable Service
+    phaseStepNameForRollback: Disable Service
+    statusForRollback: SUCCESS
+    stepsInParallel: false
+  - type: VERIFY_SERVICE
+    name: Verify Service
+    phaseStepNameForRollback: Deploy Service
+    statusForRollback: SUCCESS
+    stepsInParallel: false
+  - type: WRAP_UP
+    name: Wrap Up
+    stepsInParallel: false
+  provisionNodes: false
+  serviceName: IIS-Website
+  statefulSet: false
+templatized: false

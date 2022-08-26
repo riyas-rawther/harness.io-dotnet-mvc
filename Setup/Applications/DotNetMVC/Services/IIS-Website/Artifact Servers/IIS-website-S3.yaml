@@ -1,0 +1,7 @@
+harnessApiVersion: '1.0'
+type: AMAZON_S3
+artifactPaths:
+- phonebookmvc.zip
+bucketName: phc-dotnet-mvc-deployments
+collectionEnabled: true
+serverName: Amazon Web Services
